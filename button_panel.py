@@ -15,6 +15,7 @@ D = 50           # диаметр круглой кнопки, пикселей
 GAP = 10         # расстояние между кнопками
 PAD_X = 12       # отступ слева
 STRIP_H = 22     # высота верхней полоски (за неё двигаем окно)
+SQ = 48          # сторона квадратной кнопки (горизонтальный вариант)
 CAPTURE_TIMEOUT = 10  # сколько секунд ждать нажатия при назначении
 
 BG = "#eceef1"
@@ -208,22 +209,59 @@ class Panel:
 
     # ---------- интерфейс ----------
     def build(self):
+        old = getattr(self, "canvas", None)
+        if old is not None:
+            old.destroy()
+        self.horizontal = self.cfg.get("layout") == "h"
+        if self.horizontal:
+            self.build_horizontal()
+        else:
+            self.build_vertical()
+        self.canvas.bind("<ButtonRelease-1>", lambda e: self.reset_fills(), add="+")
+        for i in range(N_BUTTONS):
+            self.refresh(i)
+
+    def make_canvas(self, w, h):
         c = self.canvas = tk.Canvas(
-            self.root, width=W, height=H, bg=BG, highlightthickness=0, bd=0
+            self.root, width=w, height=h, bg=BG, highlightthickness=0, bd=0
         )
         c.pack()
-
-        c.create_rectangle(0, 0, W, STRIP_H, fill=STRIP, outline="", tags="drag")
-        for k in range(3):
-            x = 8 + k * 6
-            c.create_oval(x, 9, x + 3, 12, fill="#9aa1ab", outline="", tags="drag")
         c.tag_bind("drag", "<ButtonPress-1>", self.drag_start)
         c.tag_bind("drag", "<B1-Motion>", self.drag_move)
-
-        self.small_button("min", W - 40, W - 20, "–", STRIP_HOVER, self.minimize)
-        self.small_button("close", W - 20, W, "×", CLOSE_HOVER, self.close)
-
         self.ovals, self.texts = [], []
+        return c
+
+    def small_button(self, tag, x0, y0, x1, y1, label, hover, command):
+        c = self.canvas
+        rect = c.create_rectangle(x0, y0, x1, y1, fill=STRIP, outline="", tags=tag)
+        c.create_text((x0 + x1) / 2, (y0 + y1) / 2 - 1, text=label, fill=TEXT,
+                      font=("Segoe UI", 11), tags=tag)
+        c.tag_bind(tag, "<Enter>", lambda e: c.itemconfig(rect, fill=hover))
+        c.tag_bind(tag, "<Leave>", lambda e: c.itemconfig(rect, fill=STRIP))
+        c.tag_bind(tag, "<ButtonRelease-1>", lambda e: command())
+
+    def bind_button(self, tag, i):
+        c = self.canvas
+        c.tag_bind(tag, "<ButtonPress-1>", lambda e: self.down(i))
+        c.tag_bind(tag, "<ButtonRelease-1>", lambda e: self.press(i))
+        c.tag_bind(tag, "<Button-3>", lambda e: self.assign(i))
+
+    # --- вертикальный вариант: круглые кнопки ---
+    def build_vertical(self):
+        w = D + PAD_X + 16
+        h = STRIP_H + GAP + N_BUTTONS * (D + GAP)
+        c = self.make_canvas(w, h)
+        self.face_fill, self.face_down = "#ffffff", "#e4e7eb"
+        self.text_empty, self.text_w = TEXT_EMPTY, D - 8
+
+        c.create_rectangle(0, 0, w, STRIP_H, fill=STRIP, outline="", tags="drag")
+        for k in range(2):
+            x = 6 + k * 6
+            c.create_oval(x, 9, x + 3, 12, fill="#9aa1ab", outline="", tags="drag")
+        self.small_button("layout", w - 54, 0, w - 36, STRIP_H, "↔", STRIP_HOVER, self.request_toggle)
+        self.small_button("min", w - 36, 0, w - 18, STRIP_H, "–", STRIP_HOVER, self.minimize)
+        self.small_button("close", w - 18, 0, w, STRIP_H, "×", CLOSE_HOVER, self.close)
+
         for i in range(N_BUTTONS):
             x0 = PAD_X
             y0 = STRIP_H + GAP + i * (D + GAP)
@@ -234,27 +272,58 @@ class Panel:
                     x0 - grow + 3, y0 - grow + 5, x1 + grow + 3, y1 + grow + 5,
                     fill=col, outline="", tags=tag,
                 )
-            ov = c.create_oval(x0, y0, x1, y1, fill="#ffffff", outline="#f6f7f9", tags=tag)
-            tx = c.create_text(
-                (x0 + x1) / 2, (y0 + y1) / 2, text="", justify="center",
-                width=D - 8, tags=tag,
-            )
-            c.tag_bind(tag, "<ButtonPress-1>", lambda e, i=i: self.down(i))
-            c.tag_bind(tag, "<ButtonRelease-1>", lambda e, i=i: self.press(i))
-            c.tag_bind(tag, "<Button-3>", lambda e, i=i: self.assign(i))
-            self.ovals.append(ov)
+            face = c.create_oval(x0, y0, x1, y1, fill=self.face_fill, outline="#f6f7f9", tags=tag)
+            tx = c.create_text((x0 + x1) / 2, (y0 + y1) / 2, text="", justify="center",
+                               width=self.text_w, tags=tag)
+            self.bind_button(tag, i)
+            self.ovals.append(face)
             self.texts.append(tx)
-            self.refresh(i)
-        c.bind("<ButtonRelease-1>", lambda e: self.reset_fills(), add="+")
 
-    def small_button(self, tag, x0, x1, label, hover, command):
-        c = self.canvas
-        rect = c.create_rectangle(x0, 0, x1, STRIP_H, fill=STRIP, outline="", tags=tag)
-        c.create_text((x0 + x1) / 2, STRIP_H / 2 - 1, text=label, fill=TEXT,
-                      font=("Segoe UI", 11), tags=tag)
-        c.tag_bind(tag, "<Enter>", lambda e: c.itemconfig(rect, fill=hover))
-        c.tag_bind(tag, "<Leave>", lambda e: c.itemconfig(rect, fill=STRIP))
-        c.tag_bind(tag, "<ButtonRelease-1>", lambda e: command())
+    # --- горизонтальный вариант: квадратные кнопки ---
+    def build_horizontal(self):
+        handle, pad, padx, gap, ctrl = 20, 6, 6, 4, 20
+        w = handle + padx + N_BUTTONS * (SQ + gap) - gap + padx + ctrl
+        h = SQ + 2 * pad
+        c = self.make_canvas(w, h)
+        self.face_fill, self.face_down = "#c9ccd1", "#a9acb2"
+        self.text_empty, self.text_w = "#7b8088", SQ - 10
+
+        # слева — полоска, за которую двигаем окно
+        c.create_rectangle(0, 0, handle, h, fill=STRIP, outline="", tags="drag")
+        for k in range(3):
+            y = h // 2 - 8 + k * 8
+            c.create_oval(8, y, 11, y + 3, fill="#9aa1ab", outline="", tags="drag")
+
+        # справа — три маленькие кнопки: переключить вид, свернуть, закрыть
+        ch = h / 3
+        self.small_button("layout", w - ctrl, 0, w, ch, "↔", STRIP_HOVER, self.request_toggle)
+        self.small_button("min", w - ctrl, ch, w, 2 * ch, "–", STRIP_HOVER, self.minimize)
+        self.small_button("close", w - ctrl, 2 * ch, w, h, "×", CLOSE_HOVER, self.close)
+
+        for i in range(N_BUTTONS):
+            x0 = handle + padx + i * (SQ + gap)
+            y0 = pad
+            x1, y1 = x0 + SQ, y0 + SQ
+            tag = "b%d" % i
+            c.create_rectangle(x0, y0, x1, y1, fill="#8a8d92", outline="#5d6066", tags=tag)
+            face = c.create_rectangle(x0 + 2, y0 + 2, x1 - 2, y1 - 2, fill=self.face_fill,
+                                      outline="#e8eaed", tags=tag)
+            c.create_oval(x0 + 6, y0 + 6, x1 - 6, y1 - 6, fill="#b6b9be",
+                          outline="#d6d8dc", tags=tag)
+            tx = c.create_text((x0 + x1) / 2, (y0 + y1) / 2, text="", justify="center",
+                               width=self.text_w, tags=tag)
+            self.bind_button(tag, i)
+            self.ovals.append(face)
+            self.texts.append(tx)
+
+    def request_toggle(self):
+        # переключаем после того, как закончится обработка нажатия
+        self.root.after(10, self.toggle_layout)
+
+    def toggle_layout(self):
+        self.cfg["layout"] = "v" if self.horizontal else "h"
+        self.save_cfg()
+        self.build()
 
     def refresh(self, i):
         vks = self.cfg["combos"][i]
@@ -264,15 +333,15 @@ class Panel:
             text = combo_name(vks).replace("+", "+\n")
             font, fill = ("Segoe UI", 7, "bold"), TEXT
         else:
-            text, font, fill = str(i + 1), ("Segoe UI", 13), TEXT_EMPTY
+            text, font, fill = str(i + 1), ("Segoe UI", 13), self.text_empty
         self.canvas.itemconfig(self.texts[i], text=text, font=font, fill=fill)
 
     def down(self, i):
-        self.canvas.itemconfig(self.ovals[i], fill="#e4e7eb")
+        self.canvas.itemconfig(self.ovals[i], fill=self.face_down)
 
     def reset_fills(self):
         for ov in self.ovals:
-            self.canvas.itemconfig(ov, fill="#ffffff")
+            self.canvas.itemconfig(ov, fill=self.face_fill)
 
     # ---------- перемещение ----------
     def drag_start(self, e):
