@@ -15,7 +15,9 @@ D = 50           # диаметр круглой кнопки, пикселей
 GAP = 10         # расстояние между кнопками
 PAD_X = 12       # отступ слева
 STRIP_H = 22     # высота верхней полоски (за неё двигаем окно)
-SQ = 30          # сторона квадратной кнопки (горизонтальный вариант)
+SQ = 48          # сторона квадратной кнопки (горизонтальный вариант)
+BORDER = "#000000"  # цвет рамки кнопок
+BORDER_W = 2        # толщина рамки кнопок, пикселей
 CAPTURE_TIMEOUT = 10  # сколько секунд ждать нажатия при назначении
 
 BG = "#eceef1"
@@ -272,7 +274,8 @@ class Panel:
                     x0 - grow + 3, y0 - grow + 5, x1 + grow + 3, y1 + grow + 5,
                     fill=col, outline="", tags=tag,
                 )
-            face = c.create_oval(x0, y0, x1, y1, fill=self.face_fill, outline="#f6f7f9", tags=tag)
+            face = c.create_oval(x0, y0, x1, y1, fill=self.face_fill,
+                                 outline=BORDER, width=BORDER_W, tags=tag)
             tx = c.create_text((x0 + x1) / 2, (y0 + y1) / 2, text="", justify="center",
                                width=self.text_w, tags=tag)
             self.bind_button(tag, i)
@@ -305,8 +308,9 @@ class Panel:
             y0 = pad
             x1, y1 = x0 + SQ, y0 + SQ
             tag = "b%d" % i
-            c.create_rectangle(x0, y0, x1, y1, fill="#8a8d92", outline="#5d6066", tags=tag)
-            face = c.create_rectangle(x0 + 2, y0 + 2, x1 - 2, y1 - 2, fill=self.face_fill,
+            c.create_rectangle(x0, y0, x1, y1, fill="#8a8d92",
+                               outline=BORDER, width=BORDER_W, tags=tag)
+            face = c.create_rectangle(x0 + 3, y0 + 3, x1 - 3, y1 - 3, fill=self.face_fill,
                                       outline="#e8eaed", tags=tag)
             c.create_oval(x0 + 6, y0 + 6, x1 - 6, y1 - 6, fill="#b6b9be",
                           outline="#d6d8dc", tags=tag)
