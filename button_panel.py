@@ -8,6 +8,8 @@ import tkinter as tk
 import keyboard  # pip install keyboard
 
 N_BUTTONS = 5  # поменяй на 3, если нужно три кнопки
+BTN_W = 72     # ширина кнопки в пикселях
+BTN_H = 22     # высота кнопки в пикселях
 
 BASE = os.path.dirname(os.path.abspath(sys.argv[0]))
 CFG_PATH = os.path.join(BASE, "panel_config.json")
@@ -19,7 +21,7 @@ WS_EX_NOACTIVATE = 0x08000000
 class Panel:
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("Панель")
+        self.root.title("Панель (ПКМ — назначить)")
         self.root.attributes("-topmost", True)  # поверх всех окон
         self.root.resizable(False, False)
         self.assigning = False
@@ -30,19 +32,19 @@ class Panel:
 
         self.buttons = []
         for i in range(N_BUTTONS):
+            # рамка фиксированного размера, чтобы кнопка была ровно BTN_W x BTN_H пикселей
+            cell = tk.Frame(self.root, width=BTN_W, height=BTN_H)
+            cell.pack(padx=1, pady=1)
+            cell.pack_propagate(False)
             b = tk.Button(
-                self.root, width=18, height=2,
+                cell, font=("Segoe UI", 7), bd=1, padx=0, pady=0,
+                highlightthickness=0, wraplength=BTN_W - 4,
                 command=lambda i=i: self.press(i),
             )
             b.bind("<Button-3>", lambda e, i=i: self.assign(i))  # ПКМ = назначить
-            b.pack(padx=6, pady=3)
+            b.pack(fill="both", expand=True)
             self.buttons.append(b)
             self.refresh(i)
-
-        tk.Label(
-            self.root, text="ЛКМ — нажать, ПКМ — назначить",
-            fg="gray", font=("Segoe UI", 8),
-        ).pack(pady=(0, 4))
 
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
         self.root.update_idletasks()
@@ -73,9 +75,7 @@ class Panel:
 
     def refresh(self, i):
         combo = self.cfg["keys"][i]
-        self.buttons[i].config(
-            text="Кнопка %d\n%s" % (i + 1, combo.upper() if combo else "не назначено")
-        )
+        self.buttons[i].config(text=combo.upper() if combo else "Кнопка %d" % (i + 1))
 
     def press(self, i):
         combo = self.cfg["keys"][i]
@@ -86,7 +86,7 @@ class Panel:
         if self.assigning:
             return
         self.assigning = True
-        self.buttons[i].config(text="Нажми сочетание…\n(Esc — очистить)")
+        self.buttons[i].config(text="Нажми…")
 
         def worker():
             try:
