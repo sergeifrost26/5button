@@ -55,7 +55,12 @@ WM_QUIT = 0x0012
 WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP = 0x0100, 0x0101, 0x0104, 0x0105
 LLKHF_INJECTED = 0x10
 
+GWL_STYLE = -16
 GWL_EXSTYLE = -20
+WS_MINIMIZEBOX = 0x00020000
+WS_SYSMENU = 0x00080000
+SW_MINIMIZE = 6
+GA_ROOT = 2
 WS_EX_NOACTIVATE = 0x08000000
 WS_EX_APPWINDOW = 0x00040000
 WS_EX_TOOLWINDOW = 0x00000080
@@ -195,7 +200,6 @@ class Panel:
         self.build()
 
         self.root.protocol("WM_DELETE_WINDOW", self.close)
-        self.root.bind("<Map>", self.on_map)
         self.root.update_idletasks()
         self.apply_styles(True)
         self.reshow()
@@ -282,17 +286,21 @@ class Panel:
 
     # ---------- окно: значок в панели задач, сворачивание ----------
     def get_hwnd(self):
-        return user32.GetParent(self.root.winfo_id()) or self.root.winfo_id()
+        # внешнее окно Windows, в которое tkinter «заворачивает» наше окно
+        return user32.GetAncestor(self.root.winfo_id(), GA_ROOT) or self.root.winfo_id()
 
     def apply_styles(self, noactivate):
         hwnd = self.get_hwnd()
-        style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
-        style = (style & ~WS_EX_TOOLWINDOW) | WS_EX_APPWINDOW
+        ex = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+        ex = (ex & ~WS_EX_TOOLWINDOW) | WS_EX_APPWINDOW   # кнопка в панели задач
         if noactivate:
-            style |= WS_EX_NOACTIVATE
+            ex |= WS_EX_NOACTIVATE   # клик не забирает фокус у вашей программы
         else:
-            style &= ~WS_EX_NOACTIVATE
-        user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
+            ex &= ~WS_EX_NOACTIVATE
+        user32.SetWindowLongW(hwnd, GWL_EXSTYLE, ex)
+        # разрешаем окну сворачиваться
+        st = user32.GetWindowLongW(hwnd, GWL_STYLE)
+        user32.SetWindowLongW(hwnd, GWL_STYLE, st | WS_MINIMIZEBOX | WS_SYSMENU)
 
     def reshow(self):
         self.root.withdraw()
@@ -301,29 +309,20 @@ class Panel:
     def minimize(self):
         self.pos = (self.root.winfo_x(), self.root.winfo_y())
         self.minimized = True
-        self.apply_styles(False)
-        self.root.overrideredirect(False)
-        self.root.update_idletasks()
-        self.root.iconify()
-
-    def on_map(self, e):
-        if e.widget is self.root and self.minimized:
-            self.minimized = False
-            self.root.after(30, self.restore)
-
-    def restore(self):
-        self.root.overrideredirect(True)
-        self.root.geometry("+%d+%d" % self.pos)
-        self.root.attributes("-topmost", True)
-        self.root.update_idletasks()
-        self.apply_styles(True)
-        self.reshow()
+        self.apply_styles(False)   # чтобы из панели задач окно развернулось как обычное
+        user32.ShowWindow(self.get_hwnd(), SW_MINIMIZE)
 
     # запоминаем, какое окно было активным до нашей панели
     def track_foreground(self):
         try:
+            hwnd = self.get_hwnd()
+            if self.minimized and not user32.IsIconic(hwnd):
+                # окно развернули из панели задач — возвращаем «не забирать фокус»
+                self.minimized = False
+                self.apply_styles(True)
+                self.root.attributes("-topmost", True)
             fg = user32.GetForegroundWindow()
-            if fg and fg != self.get_hwnd():
+            if fg and fg != hwnd:
                 self.last_fg = fg
         except Exception:
             pass
