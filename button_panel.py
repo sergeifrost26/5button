@@ -11,11 +11,9 @@ from ctypes import wintypes
 
 # ---------- настройки внешнего вида ----------
 N_BUTTONS = 5    # количество кнопок
-D = 50           # диаметр круглой кнопки, пикселей
-GAP = 10         # расстояние между кнопками
-PAD_X = 12       # отступ слева
+SQ_GAP = 4       # расстояние между кнопками
 STRIP_H = 22     # высота верхней полоски (за неё двигаем окно)
-SQ = 30          # сторона квадратной кнопки (горизонтальный вариант)
+SQ = 30          # сторона квадратной кнопки
 BORDER = "#000000"  # цвет рамки кнопок
 BORDER_W = 2        # толщина рамки кнопок, пикселей
 CAPTURE_TIMEOUT = 10  # сколько секунд ждать нажатия при назначении
@@ -24,12 +22,8 @@ BG = "#eceef1"
 STRIP = "#dcdfe4"
 STRIP_HOVER = "#c9cdd3"
 CLOSE_HOVER = "#e5736c"
-SHADOWS = ["#e6e8ec", "#e0e3e7", "#d9dce1", "#d2d6db", "#cbcfd5"]
 TEXT = "#2b3440"
-TEXT_EMPTY = "#b5bbc4"
 
-W = D + PAD_X + 16
-H = STRIP_H + GAP + N_BUTTONS * (D + GAP)
 
 BASE = os.path.dirname(os.path.abspath(sys.argv[0]))
 CFG_PATH = os.path.join(BASE, "panel_config.json")
@@ -236,8 +230,9 @@ class Panel:
     def small_button(self, tag, x0, y0, x1, y1, label, hover, command):
         c = self.canvas
         rect = c.create_rectangle(x0, y0, x1, y1, fill=STRIP, outline="", tags=tag)
+        size = 11 if (y1 - y0) >= 18 else 9
         c.create_text((x0 + x1) / 2, (y0 + y1) / 2 - 1, text=label, fill=TEXT,
-                      font=("Segoe UI", 11), tags=tag)
+                      font=("Segoe UI", size), tags=tag)
         c.tag_bind(tag, "<Enter>", lambda e: c.itemconfig(rect, fill=hover))
         c.tag_bind(tag, "<Leave>", lambda e: c.itemconfig(rect, fill=STRIP))
         c.tag_bind(tag, "<ButtonRelease-1>", lambda e: command())
@@ -248,48 +243,59 @@ class Panel:
         c.tag_bind(tag, "<ButtonRelease-1>", lambda e: self.press(i))
         c.tag_bind(tag, "<Button-3>", lambda e: self.assign(i))
 
-    # --- вертикальный вариант: круглые кнопки ---
-    def build_vertical(self):
-        w = D + PAD_X + 16
-        h = STRIP_H + GAP + N_BUTTONS * (D + GAP)
-        c = self.make_canvas(w, h)
-        self.face_fill, self.face_down = "#ffffff", "#e4e7eb"
-        self.text_empty, self.text_w = TEXT_EMPTY, D - 8
+    # --- общий стиль и рисование квадратной кнопки ---
+    def set_square_style(self):
+        self.face_fill, self.face_down = "#c9ccd1", "#a9acb2"
+        self.text_empty = "#7b8088"
+        self.text_w = SQ - 4
+        self.fs = 7 if SQ >= 40 else 6       # шрифт сочетания
+        self.num_fs = 13 if SQ >= 40 else 11  # шрифт номера и многоточия
 
+    def draw_square(self, i, x0, y0):
+        c = self.canvas
+        x1, y1 = x0 + SQ, y0 + SQ
+        tag = "b%d" % i
+        c.create_rectangle(x0, y0, x1, y1, fill="#8a8d92",
+                           outline=BORDER, width=BORDER_W, tags=tag)
+        face = c.create_rectangle(x0 + 3, y0 + 3, x1 - 3, y1 - 3, fill=self.face_fill,
+                                  outline="#e8eaed", tags=tag)
+        if SQ >= 40:  # круглое «углубление» рисуем только на крупных кнопках
+            c.create_oval(x0 + 6, y0 + 6, x1 - 6, y1 - 6, fill="#b6b9be",
+                          outline="#d6d8dc", tags=tag)
+        tx = c.create_text((x0 + x1) / 2, (y0 + y1) / 2, text="", justify="center",
+                           width=self.text_w, tags=tag)
+        self.bind_button(tag, i)
+        self.ovals.append(face)
+        self.texts.append(tx)
+
+    # --- вертикальный вариант ---
+    def build_vertical(self):
+        cw = 16  # ширина маленьких кнопок в верхней полоске
+        w = max(SQ + 12, 3 * cw + 16)
+        x0 = (w - SQ) // 2
+        h = STRIP_H + SQ_GAP + N_BUTTONS * (SQ + SQ_GAP)
+        c = self.make_canvas(w, h)
+        self.set_square_style()
+
+        # сверху — полоска, за которую двигаем окно
         c.create_rectangle(0, 0, w, STRIP_H, fill=STRIP, outline="", tags="drag")
         for k in range(2):
-            x = 6 + k * 6
+            x = 4 + k * 5
             c.create_oval(x, 9, x + 3, 12, fill="#9aa1ab", outline="", tags="drag")
-        self.small_button("layout", w - 54, 0, w - 36, STRIP_H, "↔", STRIP_HOVER, self.request_toggle)
-        self.small_button("min", w - 36, 0, w - 18, STRIP_H, "–", STRIP_HOVER, self.minimize)
-        self.small_button("close", w - 18, 0, w, STRIP_H, "×", CLOSE_HOVER, self.close)
+        self.small_button("layout", w - 3 * cw, 0, w - 2 * cw, STRIP_H, "↔", STRIP_HOVER, self.request_toggle)
+        self.small_button("min", w - 2 * cw, 0, w - cw, STRIP_H, "–", STRIP_HOVER, self.minimize)
+        self.small_button("close", w - cw, 0, w, STRIP_H, "×", CLOSE_HOVER, self.close)
 
         for i in range(N_BUTTONS):
-            x0 = PAD_X
-            y0 = STRIP_H + GAP + i * (D + GAP)
-            x1, y1 = x0 + D, y0 + D
-            tag = "b%d" % i
-            for grow, col in zip((5, 4, 3, 2, 1), SHADOWS):
-                c.create_oval(
-                    x0 - grow + 3, y0 - grow + 5, x1 + grow + 3, y1 + grow + 5,
-                    fill=col, outline="", tags=tag,
-                )
-            face = c.create_oval(x0, y0, x1, y1, fill=self.face_fill,
-                                 outline=BORDER, width=BORDER_W, tags=tag)
-            tx = c.create_text((x0 + x1) / 2, (y0 + y1) / 2, text="", justify="center",
-                               width=self.text_w, tags=tag)
-            self.bind_button(tag, i)
-            self.ovals.append(face)
-            self.texts.append(tx)
+            self.draw_square(i, x0, STRIP_H + SQ_GAP + i * (SQ + SQ_GAP))
 
-    # --- горизонтальный вариант: квадратные кнопки ---
+    # --- горизонтальный вариант ---
     def build_horizontal(self):
-        handle, pad, padx, gap, ctrl = 20, 6, 6, 4, 20
-        w = handle + padx + N_BUTTONS * (SQ + gap) - gap + padx + ctrl
+        handle, pad, padx, ctrl = 20, 6, 6, 20
+        w = handle + padx + N_BUTTONS * (SQ + SQ_GAP) - SQ_GAP + padx + ctrl
         h = SQ + 2 * pad
         c = self.make_canvas(w, h)
-        self.face_fill, self.face_down = "#c9ccd1", "#a9acb2"
-        self.text_empty, self.text_w = "#7b8088", SQ - 10
+        self.set_square_style()
 
         # слева — полоска, за которую двигаем окно
         c.create_rectangle(0, 0, handle, h, fill=STRIP, outline="", tags="drag")
@@ -304,21 +310,7 @@ class Panel:
         self.small_button("close", w - ctrl, 2 * ch, w, h, "×", CLOSE_HOVER, self.close)
 
         for i in range(N_BUTTONS):
-            x0 = handle + padx + i * (SQ + gap)
-            y0 = pad
-            x1, y1 = x0 + SQ, y0 + SQ
-            tag = "b%d" % i
-            c.create_rectangle(x0, y0, x1, y1, fill="#8a8d92",
-                               outline=BORDER, width=BORDER_W, tags=tag)
-            face = c.create_rectangle(x0 + 3, y0 + 3, x1 - 3, y1 - 3, fill=self.face_fill,
-                                      outline="#e8eaed", tags=tag)
-            c.create_oval(x0 + 6, y0 + 6, x1 - 6, y1 - 6, fill="#b6b9be",
-                          outline="#d6d8dc", tags=tag)
-            tx = c.create_text((x0 + x1) / 2, (y0 + y1) / 2, text="", justify="center",
-                               width=self.text_w, tags=tag)
-            self.bind_button(tag, i)
-            self.ovals.append(face)
-            self.texts.append(tx)
+            self.draw_square(i, handle + padx + i * (SQ + SQ_GAP), pad)
 
     def request_toggle(self):
         # переключаем после того, как закончится обработка нажатия
@@ -332,12 +324,12 @@ class Panel:
     def refresh(self, i):
         vks = self.cfg["combos"][i]
         if self.assigning_index == i:
-            text, font, fill = "…", ("Segoe UI", 14), TEXT
+            text, font, fill = "…", ("Segoe UI", self.num_fs), TEXT
         elif vks:
             text = combo_name(vks).replace("+", "+\n")
-            font, fill = ("Segoe UI", 7, "bold"), TEXT
+            font, fill = ("Segoe UI", self.fs, "bold"), TEXT
         else:
-            text, font, fill = str(i + 1), ("Segoe UI", 13), self.text_empty
+            text, font, fill = str(i + 1), ("Segoe UI", self.num_fs), self.text_empty
         self.canvas.itemconfig(self.texts[i], text=text, font=font, fill=fill)
 
     def down(self, i):
